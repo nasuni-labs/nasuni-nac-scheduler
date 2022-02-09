@@ -83,6 +83,7 @@ When the script has completed, you will see a URL.
     |volume_key|/nasuni/keyname.pgp-111111|This is the parameter value created by Nasuni when you upload your keys through the [Nasuni Cloud Services page]. After you are on the [Nasuni Cloud Services page], click **Launch**. On the next page, choose "Run in AWS". On the next page, click **Get Started**. Select a region and make sure it is the same region that you set when you created the AWS default profile in the Prerequisites above. After accepting the Terms of Service, click **Continue**. You are then prompted to upload keys. (**Note**: Key names cannot have spaces in the names.) Upload the keys, and you receive a path back in the format listed here. |
     |volume_key_passphrase|mysecretpassphrase|Use the passphrase associated with the keys|
     |pem_key_path|/home/johndoe/.ssh/mypemkey.pem|A pem key which is also stored as one of the [key pairs] in your AWS account. (NB: case matters. Make sure that the pem key in the pem_key_path has the same capitalization as the corresponding key in AWS)|
+    |nac_scheduler_name|My_NAC_Scheduler|(Optional) The name of the NAC Scheduler. If this variable is not set, the name defaults to "NAC_Scheduler"|
     |github_organization|nasuni-labs|(Optional) If you have forked this repository or are using a forked version of this repository, add that organization name here. All calls to github repositories will look within this organization|
 
     4. After you have entered all the key value pairs, click **Next**.
