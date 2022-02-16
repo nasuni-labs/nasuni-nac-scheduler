@@ -5,6 +5,7 @@
 ## 		- Git, AWS CLI, JQ 					##
 ##		- AWS Profile Setup as nasuni		##
 ##############################################
+#Comment
 DATE_WITH_TIME=$(date "+%Y%m%d-%H%M%S")
 START=$(date +%s)
 check_if_pem_file_exists() {
