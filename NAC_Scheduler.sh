@@ -12,7 +12,7 @@ check_if_vpc_exists(){
 INPUT_VPC_IS="$1"
 
 # VPCS=`aws ec2 describe-vpcs | jq -r '.Vpcs[].VpcId'`
-VPC_CHECK=`aws ec2 describe-vpcs --filters "Name=vpc-id,Values=$INPUT_VPC_IS" --region ${AWS_REGION} | jq -r '.Vpcs[].VpcId'`
+VPC_CHECK=`aws ec2 describe-vpcs --filters "Name=vpc-id,Values=$INPUT_VPC_IS" --region ${AWS_REGION} --profile "${AWS_PROFILE} | jq -r '.Vpcs[].VpcId'`
 echo "%%%%%%% $INPUT_VPC_IS %%%%%%%%%%%"$VPC_CHECK
 
 if [ "$VPC_CHECK" == "null" ] || [ "$VPC_CHECK" == "" ]; then
