@@ -37,10 +37,12 @@ fi
 validate_github() {
 	GITHUB_ORGANIZATION=$1
 	REPO_FOLDER=$2
-	if [[ $GITHUB_ORGANIZATION == "" ]];then
+	if [ "$GITHUB_ORGANIZATION" != "" ]; then
+		echo "INFO ::: Value of github_organization is $GITHUB_ORGANIZATION"	
+	else 
 		GITHUB_ORGANIZATION="nasuni-labs"
-		echo "INFO ::: github_organization not provided as Secret Key-Value pair. So considering nasuni-labs as the default value !!!"
-	fi 
+		echo "INFO ::: Value of github_organization is set to default as $GITHUB_ORGANIZATION"	
+	fi
 	GIT_REPO="https://github.com/$GITHUB_ORGANIZATION/$REPO_FOLDER.git"
 	echo "INFO ::: git repo $GIT_REPO"
 	git ls-remote $GIT_REPO -q
@@ -107,8 +109,15 @@ parse_4thArgument_for_nac_scheduler_name() {
 		NMC_API_ENDPOINT=$(echo $SECRET_STRING  | jq -r '.SecretString' | jq -r '.nmc_api_endpoint')
 		PEM_KEY_PATH=$(echo $SECRET_STRING  | jq -r '.SecretString' | jq -r '.pem_key_path')
 		GITHUB_ORGANIZATION=$(echo $SECRET_STRING  | jq -r '.SecretString' | jq -r '.github_organization')
+		echo "KKKKKKKKKKKKKKKKKKKKKKK $GITHUB_ORGANIZATION"
 		USER_VPC_ID=$(echo $SECRET_STRING  | jq -r '.SecretString' | jq -r '.user_vpc_id')
 		echo "INFO ::: github_organization=$GITHUB_ORGANIZATION :: nac_scheduler_name=$NAC_SCHEDULER_NAME :: nmc_api_username=$NMC_API_USERNAME :: nmc_api_password=$NMC_API_PASSWORD :: nmc_api_endpoint=$NMC_API_ENDPOINT :: pem_key_path=$PEM_KEY_PATH"
+	fi
+	if [ "$GITHUB_ORGANIZATION" == "" ] || [ "$GITHUB_ORGANIZATION" == "null" ]; then
+		GITHUB_ORGANIZATION="nasuni-labs"
+		echo "INFO ::: Value of github_organization is set to default as $GITHUB_ORGANIZATION"	
+	else 
+		echo "INFO ::: Value of github_organization is $GITHUB_ORGANIZATION"	
 	fi
 }
 
@@ -211,10 +220,13 @@ parse_textfile_for_user_secret_keys_values() {
 		"user_vpc_id") USER_VPC_ID="$value" ;;
 		esac
 	done <"$file"
-	if [ $GITHUB_ORGANIZATION != "" ]; then
+	if [ "$GITHUB_ORGANIZATION" != "" ]; then
 		echo "INFO ::: Value of github_organization is $GITHUB_ORGANIZATION"	
+	else 
+		GITHUB_ORGANIZATION="nasuni-labs"
+		echo "INFO ::: Value of github_organization is set to default as $GITHUB_ORGANIZATION"	
 	fi
-	if [ $USER_VPC_ID != "" ]; then
+	if [ "$USER_VPC_ID" != "" ]; then
 		echo "INFO ::: Value of user_vpc_id is $USER_VPC_ID"	
 	fi
 	echo "INFO ::: Validating the user data file ${file} and the provided values"
