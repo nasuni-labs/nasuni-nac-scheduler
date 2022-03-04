@@ -105,8 +105,11 @@ check_for_kendra(){
             exit 0
     fi
     if [ "$IS_KE" == "N" ]; then
-        echo "ERROR ::: A Kendra Index and/or Experience has not been Configured. Need to Provision ElasticSearch Domain Before, NAC Provisioning."
+        echo "ERROR ::: A Kendra Index and/or Experience has not been Configured. Need to Provision Kendra, before NAC Provisioning."
         echo "INFO ::: Start Kendra Index and Experience Provisioning."
+        REPO_FOLDER="nasuni-amazonkendra"
+        validate_github $GITHUB_ORGANIZATION $REPO_FOLDER 
+
         ########################### Git Clone  ###############################################################
         echo "INFO ::: Start - Git Clone !!!"
         ### Download Provisioning Code from GitHub
@@ -130,7 +133,7 @@ check_for_kendra(){
             exit 1
         fi
         #### Copy tfvars file into repo
-        cp "${TFVARS_FILE}" "${GIT_REPO_NAME}"/kendra.tfvars
+        cp "${TFVARS_FILE}" "${GIT_REPO_NAME}"/
         cd "${GIT_REPO_NAME}"
         ##### RUN terraform init
         echo "INFO ::: Kendra PROVISIONING ::: STARTED ::: Executing the Terraform scripts . . . . . . . . . . . ."
