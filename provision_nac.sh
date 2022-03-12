@@ -33,6 +33,7 @@ read_TFVARS() {
       "aws_profile") AWS_PROFILE="$value" ;;
       "region") AWS_REGION="$value" ;;
       "volume_name") NMC_VOLUME_NAME="$value" ;;
+      "user_secret") USER_SECRET="$value" ;;
       "github_organization") GITHUB_ORGANIZATION="$value" ;;
     esac
   done < "$file"
@@ -65,6 +66,7 @@ read_TFVARS "$TFVARS_FILE"
 AWS_PROFILE=$(echo "$AWS_PROFILE" | tr -d '"')
 AWS_REGION=$(echo "$AWS_REGION" | tr -d '"')
 NMC_VOLUME_NAME=$(echo "$NMC_VOLUME_NAME" | tr -d '"')
+USER_SECRET=$(echo "$USER_SECRET" | tr -d '"')
 GITHUB_ORGANIZATION=$(echo "$GITHUB_ORGANIZATION" | tr -d '"')
 
 ######################## Determine what service is employed ###############################################
@@ -73,7 +75,10 @@ SERVICE = ${PWD##*_}
 ######################## Check If Kendra Endpoint is Available ###############################################
 check_for_kendra(){
     REPO_FOLDER=$1
-    KENDRA_INDEX_ID=$(aws secretsmanager get-secret-value --secret-id nac/kendra --region "${AWS_REGION}" | jq -r '.SecretString' | jq --arg VOL $NMC_VOLUME_NAME -r '.[$VOL]')
+    NAC_SCHEDULER_NAME=$(aws secretsmanager get-secret-value --secret-id ${USER_SECRET} --region "${AWS_REGION}" --profile "${AWS_PROFILE}" | jq -r '.SecretString' | jq --arg NACNAME nac_scheduler_name -r '.[$NACNAME]' | tr '[:upper:]' '[:lower:]')
+    SCHEDULER_SECRET_NAME="prod/nac/${NAC_SCHEDULER_NAME}"
+    INTEGRATION_ID="${NMC_VOLUME_NAME}_kendra"
+    KENDRA_INDEX_ID=$(aws secretsmanager get-secret-value --secret-id "${SCHEDULER_SECRET_NAME}" --region "${AWS_REGION}" --profile "${AWS_PROFILE}" | jq -r '.SecretString' | jq --arg intid "$INTEGRATION_ID" '..|.[$intid]?')
     echo "INFO ::: KENDRA_INDEX_ID : $KENDRA_INDEX_ID"
     # exit 1
     IS_KE="N"
@@ -81,7 +86,7 @@ check_for_kendra(){
         echo "ERROR ::: A Kendra index does not exist for $NMC_VOLUME_NAME "
         IS_KE="N"
     else
-        KE_INDEX_STATUS = $(aws kendra describe-index --id $KENDRA_ENDPOINT | jq -r '.Status')
+        KE_INDEX_STATUS = $(aws kendra describe-index --id $KENDRA_INDEX_ID | jq -r '.Status')
         if [ "$KE_INDEX_STATUS" == "ACTIVE" ]; then
             echo "INFO ::: The Kendra index for $NMC_VOLUME_NAME is Active"
             KE_EXPERIENCE_CREATING=$(aws kendra list-experiences --index-id $KENDRA_INDEX_ID | jq -r '.SummaryItems[]| select(.Status=="CREATING")')
@@ -144,7 +149,7 @@ check_for_kendra(){
         echo "INFO ::: Kendra PROVISIONING ::: Initialized Terraform Libraries/Dependencies"
         ##### RUN terraform Apply
         echo "INFO ::: Kendra PROVISIONING ::: STARTED ::: Terraform apply . . . . . . . . . . . . . . . . . . ."
-        COMMAND="terraform apply -auto-approve"
+        COMMAND="terraform apply -var-file=${TFVARS_FILE} -auto-approve"
         # COMMAND="terraform validate"
         $COMMAND
         if [ $? -eq 0 ]; then

@@ -20,6 +20,47 @@ fi
 
 }
 
+###################### Create Scheduler Secret ##############################
+create_scheduler_secret() {
+	SCHEDULER_SECRET="prod/nac/$NAC_SCHEDULER_NAME"
+	USER_SECRET_EXISTS=$(check_if_scheduler_secret_exists $SCHEDULER_SECRET $AWS_PROFILE $AWS_REGION)
+	echo "INFO ::: USER_SECRET_EXISTS ::: $USER_SECRET_EXISTS "
+	if [ "$USER_SECRET_EXISTS" != "N" ]; then
+		echo "INFO ::: Fourth argument is a File && the User Secret exists ==> User wants to Update the Secret Values"
+		### Update Secret
+		echo "INFO ::: Update Secret $USER_SECRET "
+		### Update Secret
+		aws secretsmanager update-secret --secret-id "${USER_SECRET}" \
+		--secret-string file://user_creds_"${NMC_VOLUME_NAME}"_"${ANALYTICS_SERVICE}".json \
+		--region "${AWS_REGION}" --profile "${AWS_PROFILE}"
+		RES="$?"
+		if [ $RES -ne 0 ]; then
+			echo "INFO ::: $RES Failed to Update Secret $USER_SECRET."
+			exit 1
+		elif [ $RES -eq 0 ]; then
+			echo "INFO ::: Secret $USER_SECRET Updated SUCCESSFULLY"
+		fi
+	else
+		## Fourth argument is a File && the User Secret Doesn't exist ==> User wants to Create a new Secret
+		### Create Secret
+		echo "INFO ::: Create Secret $USER_SECRET"
+		aws secretsmanager create-secret --name "${USER_SECRET}" \
+		--description "Preserving User specific data/secrets to be used for NAC Scheduling" \
+		--secret-string file://user_creds_"${NMC_VOLUME_NAME}"_"${ANALYTICS_SERVICE}".json \
+		--region "${AWS_REGION}" --profile "${AWS_PROFILE}"
+		RES="$?"
+		if [ $RES -ne 0 ]; then
+			echo "ERROR ::: $RES Failed to Create Secret $USER_SECRET as, its already exists."
+			exit 1
+		elif [ $RES -eq 0 ]; then
+			echo "INFO ::: Secret $USER_SECRET Created"
+		fi
+	fi
+}
+
+
+
+
 validate_github() {
 	GITHUB_ORGANIZATION=$1
 	REPO_FOLDER=$2
@@ -552,7 +593,17 @@ else
 	Schedule_CRON_JOB $NAC_SCHEDULER_IP_ADDR
 	## Setup_Search_Lambda
 	## Setup_Search_UI
-
+	#Create a secret for the scheduler
+	LOWERCASE_SCHEDULER_NAME=$NAC_SCHEDULER_NAME | tr '[:upper:]' '[:lower:]'
+	SECRET_NAME="prod/nac/${LOWERCASE_SCHEDULER_NAME}"
+	aws secretsmanager create-secret --name "${SECRET_NAME}" --region "${AWS_REGION}" --profile "${AWS_PROFILE}"
+	RES="$?"
+			if [ $RES -ne 0 ]; then
+				echo "ERROR ::: $RES Failed to Create Scheduler Secret $SECRET_NAME as, its already exists."
+				exit 1
+			elif [ $RES -eq 0 ]; then
+				echo "INFO ::: Scheduler Secret $SECRET_NAME Created"
+			fi
 fi
 
 END=$(date +%s)
