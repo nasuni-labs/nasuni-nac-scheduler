@@ -13,9 +13,9 @@ There are three AWS services that the NAC Scheduler currently supports: [AWS Ope
 
     OpenSearch enables people to easily ingest, secure, search, aggregate, view, and analyze data. These capabilities are popular for use cases such as application search, log analytics, and more. With OpenSearch, people benefit from having an open-source product that they can use, modify, extend, monetize, and resell however they want. At the same time, OpenSearch will continue to provide a secure, high-quality search and analytics suite with a rich roadmap of new and innovative functionality.
 
-* [AWS Kendra] is an intelligent search service powered by Machine Learning. It offers natural-language search, suggested answers, and the ability to customize the search experience.
+* [AWS Kendra] is an intelligent search service powered by Machine Learning. It offers natural-language search, suggested answers, and the ability to customize the search experience. (This integration is still under development. Check back soon for updates)
 
-* [Amazon SageMaker Model Building Pipelines] is a tool for building machine-learning pipelines. The NAC Scheduler feeds those pipelines with data from Nasuni volumes.
+* [Amazon SageMaker Model Building Pipelines] is a tool for building machine-learning pipelines. The NAC Scheduler feeds those pipelines with data from Nasuni volumes. (This integration is still under development. Check back soon for updates)
 
 # Prerequisites
 

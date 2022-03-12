@@ -169,88 +169,91 @@ check_for_kendra(){
 
 
 ######################## Check If ES Domain Available ###############################################
-ES_DOMAIN_NAME=$(aws secretsmanager get-secret-value --secret-id nasuni-labs-os-admin --region "${AWS_REGION}" | jq -r '.SecretString' | jq -r '.es_domain_name')
-echo "INFO ::: ES_DOMAIN NAME : $ES_DOMAIN_NAME"
-# exit 1
-IS_ES="N"
-if [ "$ES_DOMAIN_NAME" == "" ] || [ "$ES_DOMAIN_NAME" == null ]; then
-    echo "ERROR ::: ElasticSearch Domain is Not provided in admin secret"
+check_for_es(){
+    ES_DOMAIN_NAME=$(aws secretsmanager get-secret-value --secret-id nasuni-labs-os-admin --region "${AWS_REGION}" | jq -r '.SecretString' | jq -r '.es_domain_name')
+    echo "INFO ::: ES_DOMAIN NAME : $ES_DOMAIN_NAME"
+    # exit 1
     IS_ES="N"
-else
-    ES_CREATED=$(aws es describe-elasticsearch-domain --domain-name "${ES_DOMAIN_NAME}" --region "${AWS_REGION}" | jq -r '.DomainStatus.Created')
-    if [ $? -eq 0 ]; then
-        echo "INFO ::: ES_CREATED : $ES_CREATED"
-        ES_PROCESSING=$(aws es describe-elasticsearch-domain --domain-name "${ES_DOMAIN_NAME}" --region "${AWS_REGION}" | jq -r '.DomainStatus.Processing')
-        echo "INFO ::: ES_PROCESSING : $ES_PROCESSING"
-        ES_UPGRADE_PROCESSING=$(aws es describe-elasticsearch-domain --domain-name "${ES_DOMAIN_NAME}" --region "${AWS_REGION}" | jq -r '.DomainStatus.UpgradeProcessing')
-        echo "INFO ::: ES_UPGRADE_PROCESSING : $ES_UPGRADE_PROCESSING"
-    
-        if [ "$ES_PROCESSING" == "false" ] &&  [ "$ES_UPGRADE_PROCESSING" == "false" ]; then
-            echo "INFO ::: ElasticSearch Domain ::: $ES_DOMAIN_NAME is Active"
-            IS_ES="Y"
+    if [ "$ES_DOMAIN_NAME" == "" ] || [ "$ES_DOMAIN_NAME" == null ]; then
+        echo "ERROR ::: ElasticSearch Domain is Not provided in admin secret"
+        IS_ES="N"
+    else
+        ES_CREATED=$(aws es describe-elasticsearch-domain --domain-name "${ES_DOMAIN_NAME}" --region "${AWS_REGION}" | jq -r '.DomainStatus.Created')
+        if [ $? -eq 0 ]; then
+            echo "INFO ::: ES_CREATED : $ES_CREATED"
+            ES_PROCESSING=$(aws es describe-elasticsearch-domain --domain-name "${ES_DOMAIN_NAME}" --region "${AWS_REGION}" | jq -r '.DomainStatus.Processing')
+            echo "INFO ::: ES_PROCESSING : $ES_PROCESSING"
+            ES_UPGRADE_PROCESSING=$(aws es describe-elasticsearch-domain --domain-name "${ES_DOMAIN_NAME}" --region "${AWS_REGION}" | jq -r '.DomainStatus.UpgradeProcessing')
+            echo "INFO ::: ES_UPGRADE_PROCESSING : $ES_UPGRADE_PROCESSING"
+        
+            if [ "$ES_PROCESSING" == "false" ] &&  [ "$ES_UPGRADE_PROCESSING" == "false" ]; then
+                echo "INFO ::: ElasticSearch Domain ::: $ES_DOMAIN_NAME is Active"
+                IS_ES="Y"
+            else
+                echo "ERROR ::: ElasticSearch Domain ::: $ES_DOMAIN_NAME is either unavailable Or Not Active"
+                IS_ES="N"
+            fi
         else
-            echo "ERROR ::: ElasticSearch Domain ::: $ES_DOMAIN_NAME is either unavailable Or Not Active"
+            echo "ERROR ::: ElasticSearch Domain ::: $ES_DOMAIN_NAME not found"
             IS_ES="N"
         fi
-    else
-        echo "ERROR ::: ElasticSearch Domain ::: $ES_DOMAIN_NAME not found"
-        IS_ES="N"
     fi
-fi
-if [ "$IS_ES" == "N" ]; then
-    echo "ERROR ::: ElasticSearch Domain is Not Configured. Need to Provision ElasticSearch Domain Before, NAC Provisioning."
-    echo "INFO ::: Begin ElasticSearch Domain Provisioning."
-   ########## Download ElasticSearch Provisioning Code from GitHub ##########
-	### GITHUB_ORGANIZATION defaults to nasuni-labs
-	REPO_FOLDER="nasuni-awsopensearch"
-	validate_github $GITHUB_ORGANIZATION $REPO_FOLDER 
-    ########################### Git Clone  ###############################################################
-    echo "INFO ::: BEGIN - Git Clone !!!"
-    ### Download Provisioning Code from GitHub
-    GIT_REPO_NAME=$(echo ${GIT_REPO} | sed 's/.*\/\([^ ]*\/[^.]*\).*/nasuni-\1/' | cut -d "/" -f 2)
-    echo "INFO ::: $GIT_REPO"
-    echo "INFO ::: GIT_REPO_NAME $GIT_REPO_NAME"
-    pwd
-    ls
-    echo "INFO ::: Removing ${GIT_REPO_NAME}"
-    rm -rf "${GIT_REPO_NAME}"
-    pwd
-    COMMAND="git clone -b main ${GIT_REPO}"
-    $COMMAND
-    RESULT=$?
-    if [ $RESULT -eq 0 ]; then
-        echo "INFO ::: FINISH ::: GIT clone SUCCESS for repo ::: $GIT_REPO_NAME"
+    if [ "$IS_ES" == "N" ]; then
+        echo "ERROR ::: ElasticSearch Domain is Not Configured. Need to Provision ElasticSearch Domain Before, NAC Provisioning."
+        echo "INFO ::: Begin ElasticSearch Domain Provisioning."
+    ########## Download ElasticSearch Provisioning Code from GitHub ##########
+        ### GITHUB_ORGANIZATION defaults to nasuni-labs
+        REPO_FOLDER="nasuni-awsopensearch"
+        validate_github $GITHUB_ORGANIZATION $REPO_FOLDER 
+        ########################### Git Clone  ###############################################################
+        echo "INFO ::: BEGIN - Git Clone !!!"
+        ### Download Provisioning Code from GitHub
+        GIT_REPO_NAME=$(echo ${GIT_REPO} | sed 's/.*\/\([^ ]*\/[^.]*\).*/nasuni-\1/' | cut -d "/" -f 2)
+        echo "INFO ::: $GIT_REPO"
+        echo "INFO ::: GIT_REPO_NAME $GIT_REPO_NAME"
+        pwd
+        ls
+        echo "INFO ::: Removing ${GIT_REPO_NAME}"
+        rm -rf "${GIT_REPO_NAME}"
+        pwd
+        COMMAND="git clone -b main ${GIT_REPO}"
+        $COMMAND
+        RESULT=$?
+        if [ $RESULT -eq 0 ]; then
+            echo "INFO ::: FINISH ::: GIT clone SUCCESS for repo ::: $GIT_REPO_NAME"
+        else
+            echo "INFO ::: FINISH ::: GIT Clone FAILED for repo ::: $GIT_REPO_NAME"
+            exit 1
+        fi
+        cd "${GIT_REPO_NAME}"
+        ##### RUN terraform init
+        echo "INFO ::: ElasticSearch provisioning ::: BEGIN ::: Executing ::: Terraform init . . . . . . . . "
+        COMMAND="terraform init"
+        $COMMAND
+        chmod 755 $(pwd)/*
+        # exit 1
+        echo "INFO ::: ElasticSearch provisioning ::: FINISH - Executing ::: Terraform init."
+        ##### RUN terraform Apply
+        echo "INFO ::: ElasticSearch provisioning ::: BEGIN ::: Executing ::: Terraform apply . . . . . . . . . . . . . . . . . . ."
+        COMMAND="terraform apply -auto-approve"
+        # COMMAND="terraform validate"
+        $COMMAND
+        if [ $? -eq 0 ]; then
+            echo "INFO ::: ElasticSearch provisioning ::: FINISH ::: Executing ::: Terraform apply ::: SUCCESS"
+        else
+            echo "ERROR ::: ElasticSearch provisioning ::: FINISH ::: Executing ::: Terraform apply ::: FAILED "
+            exit 1
+        fi
+        cd ..
     else
-        echo "INFO ::: FINISH ::: GIT Clone FAILED for repo ::: $GIT_REPO_NAME"
-        exit 1
+        echo "INFO ::: ElasticSearch Domain is Active . . . . . . . . . ."
+        echo "INFO ::: BEGIN ::: NAC Provisioning . . . . . . . . . . . ."
     fi
-    cd "${GIT_REPO_NAME}"
-    ##### RUN terraform init
-    echo "INFO ::: ElasticSearch provisioning ::: BEGIN ::: Executing ::: Terraform init . . . . . . . . "
-    COMMAND="terraform init"
-    $COMMAND
-    chmod 755 $(pwd)/*
-    # exit 1
-    echo "INFO ::: ElasticSearch provisioning ::: FINISH - Executing ::: Terraform init."
-    ##### RUN terraform Apply
-    echo "INFO ::: ElasticSearch provisioning ::: BEGIN ::: Executing ::: Terraform apply . . . . . . . . . . . . . . . . . . ."
-    COMMAND="terraform apply -auto-approve"
-    # COMMAND="terraform validate"
-    $COMMAND
-    if [ $? -eq 0 ]; then
-        echo "INFO ::: ElasticSearch provisioning ::: FINISH ::: Executing ::: Terraform apply ::: SUCCESS"
-    else
-        echo "ERROR ::: ElasticSearch provisioning ::: FINISH ::: Executing ::: Terraform apply ::: FAILED "
-        exit 1
-    fi
-    cd ..
-else
-    echo "INFO ::: ElasticSearch Domain is Active . . . . . . . . . ."
-    echo "INFO ::: BEGIN ::: NAC Provisioning . . . . . . . . . . . ."
-fi
 
-##################################### END ES Domain ###################################################################
-# exit 0
+    ##################################### END ES Domain ###################################################################
+    # exit 0
+
+}
 
 if [ "$SERVICE" == "es" ]; then
     REPO_FOLDER = 'nasuni-analyticsconnector-opensearch'
@@ -263,8 +266,8 @@ if [ "$SERVICE" == "kendra" ]; then
     check_for_kendra $REPO_FOLDER
 
 fi
-    GIT_REPO="https://github.com/$GITHUB_ORGANIZATION/$REPO_FOLDER.git"
 
+GIT_REPO="https://github.com/$GITHUB_ORGANIZATION/$REPO_FOLDER.git"
 NMC_VOLUME_NAME=$(echo "${TFVARS_FILE}" | rev | cut -d'/' -f 1 | rev |cut -d'.' -f 1)
 cd "$NMC_VOLUME_NAME"
 pwd

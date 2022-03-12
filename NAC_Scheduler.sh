@@ -8,8 +8,23 @@
 #Comment
 DATE_WITH_TIME=$(date "+%Y%m%d-%H%M%S")
 START=$(date +%s)
+
+check_if_vpc_exists(){
+INPUT_VPC_IS="$1"
+
+# VPCS=`aws ec2 describe-vpcs | jq -r '.Vpcs[].VpcId'`
+VPC_CHECK=`aws ec2 describe-vpcs --filters "Name=vpc-id,Values=$INPUT_VPC_IS" --region ${AWS_REGION} --profile "${AWS_PROFILE}" | jq -r '.Vpcs[].VpcId'`
+echo "%%%%%%% $INPUT_VPC_IS %%%%%%%%%%%"$VPC_CHECK
+
+if [ "$VPC_CHECK" == "null" ] || [ "$VPC_CHECK" == "" ]; then
+	echo "ERROR ::: VPC $INPUT_VPC_IS not available. Please provide a valid VPC ID."
+	exit 1
+else
+	echo "INFO ::: VPC $INPUT_VPC_IS is Valid" 
+fi
+}
+
 check_if_pem_file_exists() {
-# $(echo "$GITHUB_ORGANIZATION" | tr -d '"')
 FILE=$(echo "$1" | tr -d '"')
 if [ -f "$FILE" ]; then
 	echo "INFO ::: $FILE exists."
@@ -64,10 +79,12 @@ create_scheduler_secret() {
 validate_github() {
 	GITHUB_ORGANIZATION=$1
 	REPO_FOLDER=$2
-	if [[ $GITHUB_ORGANIZATION == "" ]];then
+	if [ "$GITHUB_ORGANIZATION" != "" ]; then
+		echo "INFO ::: Value of github_organization is $GITHUB_ORGANIZATION"	
+	else 
 		GITHUB_ORGANIZATION="nasuni-labs"
-		echo "INFO ::: github_organization not provided as Secret Key-Value pair. So considering nasuni-labs as the default value !!!"
-	fi 
+		echo "INFO ::: Value of github_organization is set to default as $GITHUB_ORGANIZATION"	
+	fi
 	GIT_REPO="https://github.com/$GITHUB_ORGANIZATION/$REPO_FOLDER.git"
 	echo "INFO ::: git repo $GIT_REPO"
 	git ls-remote $GIT_REPO -q
@@ -81,7 +98,6 @@ validate_github() {
 }
 
 nmc_endpoint_accessibility() {
-	### nmc endpoint accessibility $NAC_SCHEDULER_NAME $PUB_IP_ADDR_NAC_SCHEDULER #$PEM
 	NAC_SCHEDULER_NAME="$1"
 	PUB_IP_ADDR_NAC_SCHEDULER="$2"
     NMC_API_ENDPOINT="$3"
@@ -100,9 +116,9 @@ nmc_endpoint_accessibility() {
 	echo "INFO ::: NMC_API_USERNAME ::: ${NMC_API_USERNAME}"
 	echo "INFO ::: NMC_API_PASSWORD ::: ${NMC_API_PASSWORD}" # 31-37
 
-	echo "INFO ::: PUB_IP_ADDR_NAC_SCHEDULER :"$PUB_IP_ADDR_NAC_SCHEDULER
+	echo "INFO ::: PUB_IP_ADDR_NAC_SCHEDULER : "$PUB_IP_ADDR_NAC_SCHEDULER
 	py_file_name=$(ls check_nmc_visiblity.py)
-	echo "INFO ::: Python File Name-"$py_file_name
+	echo "INFO ::: Executing Python code file : "$py_file_name
 	cat $py_file_name | ssh -i "$PEM" ubuntu@$PUB_IP_ADDR_NAC_SCHEDULER -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null python3 - $NMC_API_USERNAME $NMC_API_PASSWORD $NMC_API_ENDPOINT
 	if [ $? -eq 0 ]; then
 		echo "INFO ::: NAC Scheduler with IP : ${PUB_IP_ADDR_NAC_SCHEDULER}, have access to NMC API ${NMC_API_ENDPOINT} "
@@ -110,7 +126,7 @@ nmc_endpoint_accessibility() {
 		echo "ERROR ::: NAC Scheduler with IP : ${PUB_IP_ADDR_NAC_SCHEDULER}, Does NOT have access to NMC API ${NMC_API_ENDPOINT}. Please configure access to NMC "
 		exit 1
 	fi
-	echo "INFO ::: Completed nmc endpoint accessibility Check. !!!"
+	echo "INFO ::: Completed NMC endpoint accessibility Check. !!!"
 
 }
 parse_4thArgument_for_nac_scheduler_name() {
@@ -122,6 +138,7 @@ parse_4thArgument_for_nac_scheduler_name() {
 			"nac_scheduler_name") NAC_SCHEDULER_NAME="$value" ;;
 			"pem_key_path") PEM_KEY_PATH="$value" ;;
 			"github_organization") GITHUB_ORGANIZATION="$value" ;;
+			"user_vpc_id") USER_VPC_ID="$value" ;;
 			esac
 		done <"$file"
 	else
@@ -134,7 +151,15 @@ parse_4thArgument_for_nac_scheduler_name() {
 		NMC_API_ENDPOINT=$(echo $SECRET_STRING  | jq -r '.SecretString' | jq -r '.nmc_api_endpoint')
 		PEM_KEY_PATH=$(echo $SECRET_STRING  | jq -r '.SecretString' | jq -r '.pem_key_path')
 		GITHUB_ORGANIZATION=$(echo $SECRET_STRING  | jq -r '.SecretString' | jq -r '.github_organization')
-		echo "INFO ::: nac_scheduler_name=$NAC_SCHEDULER_NAME :: nmc_api_username=$NMC_API_USERNAME :: nmc_api_password=$NMC_API_PASSWORD :: nmc_api_endpoint=$NMC_API_ENDPOINT :: pem_key_path=$PEM_KEY_PATH"
+		echo "KKKKKKKKKKKKKKKKKKKKKKK $GITHUB_ORGANIZATION"
+		USER_VPC_ID=$(echo $SECRET_STRING  | jq -r '.SecretString' | jq -r '.user_vpc_id')
+		echo "INFO ::: github_organization=$GITHUB_ORGANIZATION :: nac_scheduler_name=$NAC_SCHEDULER_NAME :: nmc_api_username=$NMC_API_USERNAME :: nmc_api_password=$NMC_API_PASSWORD :: nmc_api_endpoint=$NMC_API_ENDPOINT :: pem_key_path=$PEM_KEY_PATH"
+	fi
+	if [ "$GITHUB_ORGANIZATION" == "" ] || [ "$GITHUB_ORGANIZATION" == "null" ]; then
+		GITHUB_ORGANIZATION="nasuni-labs"
+		echo "INFO ::: Value of github_organization is set to default as $GITHUB_ORGANIZATION"	
+	else 
+		echo "INFO ::: Value of github_organization is $GITHUB_ORGANIZATION"	
 	fi
 }
 
@@ -142,8 +167,8 @@ append_nac_keys_values_to_tfvars() {
 	inputFile="$1" ### Read InputFile
 	outFile="$2"
 	dos2unix $inputFile
-	echo "      inputFile ::: $inputFile"
-	echo "      outFile ::: $outFile"
+	# echo "INFO ::: Append nac key-value(s) to tfvars, inputFile ::: $inputFile"
+	# echo "INFO ::: Append nac key-value(s) to tfvars, outFile ::: $outFile"
 
 	while IFS="=" read -r key value; do
 		echo "$key ::: $value "
@@ -151,6 +176,7 @@ append_nac_keys_values_to_tfvars() {
 			echo "$key=$value" >>$outFile
 		fi
 	done <"$inputFile"
+	echo "INFO ::: Append NAC key-value(s) to tfvars, ::: $outFile"
 }
 
 check_if_secret_exists() {
@@ -159,10 +185,7 @@ check_if_secret_exists() {
 	AWS_REGION="$3"
 	# Verify the Secret Exists
 	if [[ -n $USER_SECRET ]]; then
-		# echo "USER SECRET:    $USER_SECRET"
-		#COMMAND="aws secretsmanager get-secret-value --secret-id ${USER_SECRET} --profile ${AWS_PROFILE} --region ${AWS_REGION}"
 		COMMAND=`aws secretsmanager get-secret-value --secret-id ${USER_SECRET} --profile ${AWS_PROFILE} --region ${AWS_REGION}`
-		# $COMMAND
 		RES=$?
 		if [[ $RES -eq 0 ]]; then
 			### echo "INFO ::: Secret ${USER_SECRET} Exists. $RES"
@@ -236,8 +259,26 @@ parse_textfile_for_user_secret_keys_values() {
 		"destination_bucket") DESTINATION_BUCKET="$value" ;;
 		"pem_key_path") PEM_KEY_PATH="$value" ;;
 		"github_organization") GITHUB_ORGANIZATION="$value" ;;
+		"user_vpc_id") USER_VPC_ID="$value" ;;
 		esac
 	done <"$file"
+	if [ "$GITHUB_ORGANIZATION" != "" ]; then
+		echo "INFO ::: Value of github_organization is $GITHUB_ORGANIZATION"	
+	else 
+		GITHUB_ORGANIZATION="nasuni-labs"
+		echo "INFO ::: Value of github_organization is set to default as $GITHUB_ORGANIZATION"	
+	fi
+	if [ "$USER_VPC_ID" != "" ]; then
+		echo "INFO ::: Value of user_vpc_id is $USER_VPC_ID"	
+	fi
+	echo "INFO ::: Validating the user data file ${file} and the provided values"
+	validate_kvp nmc_api_username "${NMC_API_USERNAME}"
+	validate_kvp nmc_api_password "${NMC_API_PASSWORD}"
+	validate_kvp nac_product_key "${NAC_PRODUCT_KEY}"
+	validate_kvp nmc_api_endpoint "${NMC_API_ENDPOINT}"
+	validate_kvp web_access_appliance_address "${WEB_ACCESS_APPLIANCE_ADDRESS}"
+	validate_kvp destination_bucket "${DESTINATION_BUCKET}"
+	validate_kvp pem_key_path "${PEM_KEY_PATH}"
 }
 create_JSON_from_Input_user_KVPfile() {
 	file_name=$1
@@ -278,14 +319,11 @@ add_ip_to_sec_grp() {
 		echo $SECURITY_GROUP_ID
 		echo "INFO ::: Security group of NAC Scheduler Instance $NAC_SCHEDULER_NAME is $SECURITY_GROUP_ID"
 	fi
-	#If OS name is windows
 	status=$(aws ec2 authorize-security-group-ingress --group-id ${SECURITY_GROUP_ID} --profile "${AWS_PROFILE}" --protocol tcp --port 22 --cidr ${NEW_CIDR} 2>/dev/null)
-	# aws ec2 authorize-security-group-ingress --group-name sg-a3204ac8 --protocol tcp --port 22 --cidr 103.168.202.24/24
 	if [ $? -eq 0 ]; then
 		echo "INFO ::: Local Computer IP $NEW_CIDR updated to inbound rule of Security Group $SECURITY_GROUP_ID"
 	else
 		echo "INFO ::: IP $NEW_CIDR already available in inbound rule of Security Group $SECURITY_GROUP_ID"
-		# echo "FAIL"
 	fi
 
 }
@@ -297,7 +335,7 @@ AWS_SECRET_ACCESS_KEY=""
 ARG_COUNT="$#"
 ######################## Validating AWS profile for NAC ####################################
 validate_aws_profile() {
-	echo "INFO ::: Validating AWS profile for NAC  . . . . . . . . . . . . . . . . !!!"
+	echo "INFO ::: Validating AWS profile ${AWS_PROFILE} for NAC  . . . . . . . . . . . . . . . . !!!"
 
 	if [[ "$(grep '^[[]profile' <~/.aws/config | awk '{print $2}' | sed 's/]$//' | grep "${AWS_PROFILE}")" == "" ]]; then
 		echo "ERROR ::: AWS profile ${AWS_PROFILE} does not exists. To Create AWS PROFILE, Run cli command - aws configure "
@@ -305,11 +343,9 @@ validate_aws_profile() {
 	else # AWS Profile nasuni available in local machine
 		AWS_ACCESS_KEY_ID=$(aws configure get aws_access_key_id --profile ${AWS_PROFILE})
 		AWS_SECRET_ACCESS_KEY=$(aws configure get aws_secret_access_key --profile ${AWS_PROFILE})
-		AWS_REGION=$(aws configure get region --profile ${AWS_PROFILE})
+		AWS_REGION=`aws configure get region --profile ${AWS_PROFILE}`
 	fi
 
-	echo "INFO ::: AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID"
-	echo "INFO ::: AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY"
 	echo "INFO ::: AWS_REGION=$AWS_REGION"
 	echo "INFO ::: NMC_VOLUME_NAME=$NMC_VOLUME_NAME"
 	echo "INFO ::: AWS profile Validation SUCCESS !!!"
@@ -417,17 +453,7 @@ if [[ -n "$FOURTH_ARG" ]]; then
 
 		### Parse the user data - KVP
 		parse_textfile_for_user_secret_keys_values "$FOURTH_ARG"
-
 		### Validate the user data file and the provided values
-		echo "INFO ::: Validating the user data file ${FOURTH_ARG} and the provided values"
-		validate_kvp nmc_api_username "${NMC_API_USERNAME}"
-		validate_kvp nmc_api_password "${NMC_API_PASSWORD}"
-		validate_kvp nac_product_key "${NAC_PRODUCT_KEY}"
-		validate_kvp nmc_api_endpoint "${NMC_API_ENDPOINT}"
-		validate_kvp web_access_appliance_address "${WEB_ACCESS_APPLIANCE_ADDRESS}"
-		validate_kvp destination_bucket "${DESTINATION_BUCKET}"
-		validate_kvp pem_key_path "${PEM_KEY_PATH}"
-		# dos2unix $PEM_KEY_PATH
 		check_if_pem_file_exists $PEM_KEY_PATH
 		### nac_scheduler_name   - Get the value -- If its not null / "" then NAC_SCHEDULER_NAME = ${nac_scheduler_name}
 		create_JSON_from_Input_user_KVPfile $FOURTH_ARG >user_creds_"${NMC_VOLUME_NAME}"_"${ANALYTICS_SERVICE}".json
@@ -500,6 +526,15 @@ echo "INFO ::: Get IP Address of NAC Scheduler Instance"
 NAC_SCHEDULER_NAME=""
 # parse_textfile_for_nac_scheduler_name "$FOURTH_ARG"
 parse_4thArgument_for_nac_scheduler_name "$FOURTH_ARG"
+# echo INFO ::: USER_VPC_ID = $USER_VPC_ID
+if [ "$USER_VPC_ID" == "" ] || [ "$USER_VPC_ID" == "null" ]; then
+	echo "INFO ::: user_vpc_id not provided in the user Secret, Provisioning will be done in the Default VPC"  
+# elif [ "$USER_VPC_ID" == "null" ]; then
+	# echo "INFO ::: user_vpc_id not provided in the user Secret, Provisioning will be done in the Default VPC"  
+else
+	echo "INFO ::: user_vpc_id provided in the user Secret, VPC_ID=$USER_VPC_ID"  
+	check_if_vpc_exists $USER_VPC_ID
+fi
 echo "INFO ::: nac_scheduler_name = $NAC_SCHEDULER_NAME "
 if [ "$NAC_SCHEDULER_NAME" != "" ]; then
 	### User has provided the NACScheduler Name as Key-Value from 4th Argument
@@ -529,7 +564,7 @@ else
 	echo "INFO ::: $GIT_REPO"
 	echo "INFO ::: GIT_REPO_NAME - $GIT_REPO_NAME"
 	pwd
-	ls
+	# ls
 	rm -rf "${GIT_REPO_NAME}"
 	COMMAND="git clone -b main ${GIT_REPO}"
 	$COMMAND
@@ -543,7 +578,6 @@ else
 		COMMAND="git pull origin main"
 		$COMMAND
 	fi
-	# exit 888
 	### Download Provisioning Code from GitHub completed
 	echo "INFO ::: NAC Scheduler EC2 provisioning ::: BEGIN - Executing ::: Terraform init . . . . . . . . "
 	COMMAND="terraform init"
@@ -560,7 +594,6 @@ else
 	### Copy the Pem Key from provided path to current folder
 	cp $PEM_KEY_PATH ./
 	chmod 400 $PEM
-	ls -alt
 	echo "aws_profile="\"$AWS_PROFILE\" >>$TFVARS_NAC_SCHEDULER
 	echo "region="\"$AWS_REGION\" >>$TFVARS_NAC_SCHEDULER
 	if [[ "$NAC_SCHEDULER_NAME" != "" ]]; then
@@ -569,9 +602,11 @@ else
 		echo "pem_key_file="\"$PEM\" >>$TFVARS_NAC_SCHEDULER
 		echo "aws_key="\"$AWS_KEY\" >>$TFVARS_NAC_SCHEDULER
 	fi
-
+	echo "github_organization="\"$GITHUB_ORGANIZATION\" >>$TFVARS_NAC_SCHEDULER
+	if [[ "$USER_VPC_ID" != "" ]]; then
+		echo "user_vpc_id="\"$USER_VPC_ID\" >>$TFVARS_NAC_SCHEDULER
+	fi
 	dos2unix $TFVARS_NAC_SCHEDULER
-
 	COMMAND="terraform apply -var-file=$TFVARS_NAC_SCHEDULER -auto-approve"
 	$COMMAND
 	if [ $? -eq 0 ]; then
