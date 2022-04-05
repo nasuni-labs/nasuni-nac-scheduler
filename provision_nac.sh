@@ -206,7 +206,7 @@ if [ $? -eq 0 ]; then
         echo "INFO ::: NAC provisioning ::: FINISH ::: Terraform apply ::: FAILED"
         exit 1
     fi
-sleep 50
+sleep 1800
 
 INTERNAL_SECRET=$(head -n 1 nac_uniqui_id.txt  | tr -d "'")
 echo "INFO ::: Internal secret for NAC Discovery is : $INTERNAL_SECRET"
