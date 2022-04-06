@@ -331,10 +331,29 @@ Schedule_CRON_JOB() {
 		echo "INFO ::: $ARG_COUNT th Argument is supplied as ::: $NAC_INPUT_KVP"
 		append_nac_keys_values_to_tfvars $NAC_INPUT_KVP $TFVARS_FILE_NAME
 	fi
+	scp -i "$PEM" -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null create_layer.sh ubuntu@$NAC_SCHEDULER_IP_ADDR:~/ #SSA
+	RES="$?"
+	if [ $RES -ne 0 ]; then
+		echo "ERROR ::: Failed to Copy create_layer.sh to NAC_Scheduer Instance."
+		exit 1
+	elif [ $RES -eq 0 ]; then
+		echo "INFO :::create_layer.sh Uploaded Successfully to NAC_Scheduer Instance."
+	fi
+	ssh -i "$PEM" ubuntu@"$NAC_SCHEDULER_IP_ADDR" -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null "sh create_layer.sh nasuni-labs-os-lambda-layer $AWS_PROFILE" #SSA
+	RES="$?"
+	if [ $RES -ne 0 ]; then
+		echo "ERROR ::: Failed to execute create_layer.sh to NAC_Scheduer Instance."
+		exit 1
+	elif [ $RES -eq 0 ]; then
+		echo "INFO :::create_layer.sh executed Successfully to NAC_Scheduer Instance."
+	fi
+	# echo "Exiting from "
+	# exit 1
 	### Create Directory for each Volume
 	ssh -i "$PEM" ubuntu@"$NAC_SCHEDULER_IP_ADDR" -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null "[ ! -d $CRON_DIR_NAME ] && mkdir $CRON_DIR_NAME "
 	### Copy TFVARS and provision_nac.sh to NACScheduler
 	scp -i "$PEM" -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null provision_nac.sh "$TFVARS_FILE_NAME" ubuntu@$NAC_SCHEDULER_IP_ADDR:~/$CRON_DIR_NAME
+
 	RES="$?"
 	if [ $RES -ne 0 ]; then
 		echo "ERROR ::: Failed to Copy $TFVARS_FILE_NAME to NAC_Scheduer Instance."
@@ -545,7 +564,7 @@ else
 	### Create .tfvars file to be used by the NACScheduler Instance Provisioning
 	pwd
 	TFVARS_NAC_SCHEDULER="NACScheduler.tfvars"
-	rm -rf "$TFVARS_NAC_SCHEDULER"
+	rm -rf "$TFVARS_NAC_SCHEDULER" 
     AWS_KEY=$(echo ${PEM_KEY_PATH} | sed 's/.*\/\([^ ]*\/[^.]*\).*/\1/' | cut -d "/" -f 2)
 	echo $AWS_KEY
 	PEM="$AWS_KEY.pem"
