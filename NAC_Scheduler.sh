@@ -7,19 +7,52 @@
 ##############################################
 DATE_WITH_TIME=$(date "+%Y%m%d-%H%M%S")
 START=$(date +%s)
+check_if_subnet_exists(){
+	INPUT_SUBNET="$1"
+	INPUT_VPC="$2"
+	SUBNET_CHECK=`aws ec2 describe-subnets --filters "Name=subnet-id,Values=$INPUT_SUBNET" --region ${AWS_REGION} --profile "${AWS_PROFILE}"`
+	SUBNET=`echo $SUBNET_CHECK | jq -r '.Subnets[].SubnetId'`
+	echo "$SUBNET ***"
+	SUBNET_VPC=`echo $SUBNET_CHECK | jq -r '.Subnets[].VpcId'`
+	# SUBNET_VPC=`aws ec2 describe-subnets --filters "Name=subnet-id,Values=$INPUT_SUBNET" --region ${AWS_REGION} --profile "${AWS_PROFILE}" | jq -r '.Subnets[].VpcId'`
+	echo "$SUBNET_VPC ****"
+	VPC_IS="$SUBNET_VPC"
+	SUBNET_IS="$SUBNET"
+	AZ_IS=`echo $SUBNET_CHECK | jq -r '.Subnets[].AvailabilityZone'`
+	echo "SUBNET_IS=$SUBNET_IS , VPC_IS=$VPC_IS, AZ_IS=$AZ_IS"
+	if [ "$INPUT_VPC" == "" ] ; then
+		INPUT_VPC=$VPC_IS
+	fi
+	if [ "$VPC_IS" != "$INPUT_VPC" ] ; then
+		echo "ERROR ::: $INPUT_SUBNET is not a valid Subnet in VPC $INPUT_VPC."
+		exit 1
+	fi
+
+	if [ "$SUBNET" == "null" ] || [ "$SUBNET" == "" ]; then
+		echo "ERROR ::: Subnet $INPUT_SUBNET not available. Please provide a valid Subnet ID."
+		exit 1
+	else
+		echo "INFO ::: Subnet $SUBNET_IS exists in VPC $VPC_IS" 
+	fi
+}
 
 check_if_vpc_exists(){
-INPUT_VPC_IS="$1"
+INPUT_VPC="$1"
 
 # VPCS=`aws ec2 describe-vpcs | jq -r '.Vpcs[].VpcId'`
-VPC_CHECK=`aws ec2 describe-vpcs --filters "Name=vpc-id,Values=$INPUT_VPC_IS" --region ${AWS_REGION} --profile "${AWS_PROFILE}" | jq -r '.Vpcs[].VpcId'`
-echo "%%%%%%% $INPUT_VPC_IS %%%%%%%%%%%"$VPC_CHECK
-
+# VPC_CHECK=`aws ec2 describe-vpcs --filters "Name=vpc-id,Values=$INPUT_VPC" --region ${AWS_REGION} --profile "${AWS_PROFILE}" | jq -r '.Vpcs[].VpcId'`
+VPC_CHECK=`aws ec2 describe-vpcs --filters "Name=vpc-id,Values=$INPUT_VPC" --region ${AWS_REGION} --profile "${AWS_PROFILE}" | jq -r '.Vpcs[].VpcId'`
+echo "$?"
+VPC_0_SUBNET=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$INPUT_VPC" --region ${AWS_REGION} --profile "${AWS_PROFILE}" | jq -r '.Subnets[0].SubnetId')
+VPC_IS="$VPC_CHECK"
+SUBNET_IS="$VPC_0_SUBNET"
+AZ_IS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$INPUT_VPC" --region ${AWS_REGION} --profile "${AWS_PROFILE}" | jq -r '.Subnets[0].AvailabilityZone')
+echo "SUBNET_IS=$VPC_0_SUBNET , VPC_IS=$VPC_CHECK, AZ_IS=$AZ_IS"
 if [ "$VPC_CHECK" == "null" ] || [ "$VPC_CHECK" == "" ]; then
-	echo "ERROR ::: VPC $INPUT_VPC_IS not available. Please provide a valid VPC ID."
+	echo "ERROR ::: VPC $INPUT_VPC not available. Please provide a valid VPC ID."
 	exit 1
 else
-	echo "INFO ::: VPC $INPUT_VPC_IS is Valid" 
+	echo "INFO ::: VPC $VPC_IS is Valid" 
 fi
 }
 
@@ -66,10 +99,10 @@ nmc_endpoint_accessibility() {
 	chmod 400 $PEM
 	### nac_scheduler_name = from FourthArgument of NAC_Scheduler.sh, user_sec.txt
 	### parse_textfile_for_user_secret_keys_values user_sec.txt
-	echo "INFO ::: Inside nmc_endpoint_accessibility"
+	# echo "INFO ::: Inside nmc_endpoint_accessibility"
 	echo "INFO ::: NAC_SCHEDULER_NAME ::: ${NAC_SCHEDULER_NAME}"
 	echo "INFO ::: PUB_IP_ADDR_NAC_SCHEDULER ::: ${PUB_IP_ADDR_NAC_SCHEDULER}"
-	echo "INFO ::: PEM ::: ${PEM}"
+	# echo "INFO ::: PEM ::: ${PEM}"
 	echo "INFO ::: NMC_API_ENDPOINT ::: ${NMC_API_ENDPOINT}"
 	echo "INFO ::: NMC_API_USERNAME ::: ${NMC_API_USERNAME}"
 	echo "INFO ::: NMC_API_PASSWORD ::: ${NMC_API_PASSWORD}" # 31-37
@@ -97,6 +130,7 @@ parse_4thArgument_for_nac_scheduler_name() {
 			"pem_key_path") PEM_KEY_PATH="$value" ;;
 			"github_organization") GITHUB_ORGANIZATION="$value" ;;
 			"user_vpc_id") USER_VPC_ID="$value" ;;
+			"user_subnet_id") USER_SUBNET_ID="$value" ;;
 			esac
 		done <"$file"
 	else
@@ -109,8 +143,8 @@ parse_4thArgument_for_nac_scheduler_name() {
 		NMC_API_ENDPOINT=$(echo $SECRET_STRING  | jq -r '.SecretString' | jq -r '.nmc_api_endpoint')
 		PEM_KEY_PATH=$(echo $SECRET_STRING  | jq -r '.SecretString' | jq -r '.pem_key_path')
 		GITHUB_ORGANIZATION=$(echo $SECRET_STRING  | jq -r '.SecretString' | jq -r '.github_organization')
-		echo "KKKKKKKKKKKKKKKKKKKKKKK $GITHUB_ORGANIZATION"
 		USER_VPC_ID=$(echo $SECRET_STRING  | jq -r '.SecretString' | jq -r '.user_vpc_id')
+		USER_SUBNET_ID=$(echo $SECRET_STRING  | jq -r '.SecretString' | jq -r '.user_subnet_id')
 		echo "INFO ::: github_organization=$GITHUB_ORGANIZATION :: nac_scheduler_name=$NAC_SCHEDULER_NAME :: nmc_api_username=$NMC_API_USERNAME :: nmc_api_password=$NMC_API_PASSWORD :: nmc_api_endpoint=$NMC_API_ENDPOINT :: pem_key_path=$PEM_KEY_PATH"
 	fi
 	if [ "$GITHUB_ORGANIZATION" == "" ] || [ "$GITHUB_ORGANIZATION" == "null" ]; then
@@ -125,9 +159,6 @@ append_nac_keys_values_to_tfvars() {
 	inputFile="$1" ### Read InputFile
 	outFile="$2"
 	dos2unix $inputFile
-	# echo "INFO ::: Append nac key-value(s) to tfvars, inputFile ::: $inputFile"
-	# echo "INFO ::: Append nac key-value(s) to tfvars, outFile ::: $outFile"
-
 	while IFS="=" read -r key value; do
 		echo "$key ::: $value "
 		if [ ${#key} -ne 0 ]; then
@@ -218,6 +249,7 @@ parse_textfile_for_user_secret_keys_values() {
 		"pem_key_path") PEM_KEY_PATH="$value" ;;
 		"github_organization") GITHUB_ORGANIZATION="$value" ;;
 		"user_vpc_id") USER_VPC_ID="$value" ;;
+		"user_subnet_id") USER_SUBNET_ID="$value" ;;
 		esac
 	done <"$file"
 	if [ "$GITHUB_ORGANIZATION" != "" ]; then
@@ -501,17 +533,8 @@ echo "INFO ::: Get IP Address of NAC Scheduler Instance"
 ######################  NAC Scheduler Instance is Available ##############################
 
 NAC_SCHEDULER_NAME=""
-# parse_textfile_for_nac_scheduler_name "$FOURTH_ARG"
+### parse_textfile_for_nac_scheduler_name "$FOURTH_ARG"
 parse_4thArgument_for_nac_scheduler_name "$FOURTH_ARG"
-# echo INFO ::: USER_VPC_ID = $USER_VPC_ID
-if [ "$USER_VPC_ID" == "" ] || [ "$USER_VPC_ID" == "null" ]; then
-	echo "INFO ::: user_vpc_id not provided in the user Secret, Provisioning will be done in the Default VPC"  
-# elif [ "$USER_VPC_ID" == "null" ]; then
-	# echo "INFO ::: user_vpc_id not provided in the user Secret, Provisioning will be done in the Default VPC"  
-else
-	echo "INFO ::: user_vpc_id provided in the user Secret, VPC_ID=$USER_VPC_ID"  
-	check_if_vpc_exists $USER_VPC_ID
-fi
 echo "INFO ::: nac_scheduler_name = $NAC_SCHEDULER_NAME "
 if [ "$NAC_SCHEDULER_NAME" != "" ]; then
 	### User has provided the NACScheduler Name as Key-Value from 4th Argument
@@ -531,6 +554,33 @@ if [ "$PUB_IP_ADDR_NAC_SCHEDULER" != "" ]; then
 ###################### NAC Scheduler EC2 Instance is NOT Available ##############################
 else
 	## "NAC Scheduler is not present. Creating new EC2 machine."
+	if [ "$USER_VPC_ID" == "" ] || [ "$USER_VPC_ID" == "null" ]; then
+		echo "INFO ::: user_vpc_id not provided in the user Secret"  
+		if [ "$USER_SUBNET_ID" == "" ] || [ "$USER_SUBNET_ID" == "null" ]; then
+		### Both user_vpc_id and user_subnet_id not provided , It will take Default VPC and Subnet
+			echo "INFO ::: user_subnet_id not provided in the user Secret, Provisioning will be done in the Default VPC Subnet"
+		
+		else
+		### user_vpc_id not provided but, user_subnet_id provided 
+			echo "INFO ::: user_subnet_id provided in the user Secret as user_subnet_id=$USER_SUBNET_ID"  
+			check_if_subnet_exists $USER_SUBNET_ID $USER_VPC_ID
+
+		fi
+	else
+		### If user_vpc_id provided
+		if [ "$USER_SUBNET_ID" == "" ] || [ "$USER_SUBNET_ID" == "null" ]; then
+		### If user_vpc_id provided and user_subnet_id not Provided, It will take the provided VPC ID and its default Subnet
+			echo "INFO ::: user_subnet_id not provided in the user Secret, Provisioning will be done in the Provided VPC $USER_VPC_ID and its default Subnet"
+			check_if_vpc_exists $USER_VPC_ID
+
+		else
+		### If user_vpc_id provided and user_subnet_id Provided, It will take the provided VPC ID and provided Subnet
+			echo "INFO ::: user_vpc_id and user_subnet_id Provided in the user Secret, Provisioning will be done in the Provided VPC $USER_VPC_ID and Subnet $USER_SUBNET_ID"
+			# check_if_subnet_exists $USER_SUBNET_ID
+			check_if_subnet_exists $USER_SUBNET_ID $USER_VPC_ID
+
+		fi
+	fi
 	echo "INFO ::: NAC Scheduler Instance is not present. Creating new EC2 machine."
 	########## Download NAC Scheduler Instance Provisioning Code from GitHub ##########
 	### GITHUB_ORGANIZATION defaults to nasuni-labs
@@ -566,7 +616,7 @@ else
 	TFVARS_NAC_SCHEDULER="NACScheduler.tfvars"
 	rm -rf "$TFVARS_NAC_SCHEDULER" 
     AWS_KEY=$(echo ${PEM_KEY_PATH} | sed 's/.*\/\([^ ]*\/[^.]*\).*/\1/' | cut -d "/" -f 2)
-	echo $AWS_KEY
+	# echo $AWS_KEY
 	PEM="$AWS_KEY.pem"
 	### Copy the Pem Key from provided path to current folder
 	cp $PEM_KEY_PATH ./
@@ -580,9 +630,18 @@ else
 		echo "aws_key="\"$AWS_KEY\" >>$TFVARS_NAC_SCHEDULER
 	fi
 	echo "github_organization="\"$GITHUB_ORGANIZATION\" >>$TFVARS_NAC_SCHEDULER
-	if [[ "$USER_VPC_ID" != "" ]]; then
-		echo "user_vpc_id="\"$USER_VPC_ID\" >>$TFVARS_NAC_SCHEDULER
+	if [[ "$VPC_IS" != "" ]]; then
+		echo "user_vpc_id="\"$VPC_IS\" >>$TFVARS_NAC_SCHEDULER
 	fi
+	if [[ "$SUBNET_IS" != "" ]]; then
+		echo "user_subnet_id="\"$SUBNET_IS\" >>$TFVARS_NAC_SCHEDULER
+	fi
+	if [[ "$AZ_IS" != "" ]]; then
+		echo "subnet_availability_zone="\"$AZ_IS\" >>$TFVARS_NAC_SCHEDULER
+	fi
+	echo "$TFVARS_NAC_SCHEDULER created"
+	echo `cat $TFVARS_NAC_SCHEDULER`
+
 	dos2unix $TFVARS_NAC_SCHEDULER
 	COMMAND="terraform apply -var-file=$TFVARS_NAC_SCHEDULER -auto-approve"
 	$COMMAND
