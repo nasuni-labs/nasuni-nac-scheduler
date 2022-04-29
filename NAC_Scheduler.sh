@@ -131,6 +131,7 @@ parse_4thArgument_for_nac_scheduler_name() {
 			"github_organization") GITHUB_ORGANIZATION="$value" ;;
 			"user_vpc_id") USER_VPC_ID="$value" ;;
 			"user_subnet_id") USER_SUBNET_ID="$value" ;;
+			"use_private_ip") USE_PRIVATE_IP="$value" ;;
 			esac
 		done <"$file"
 	else
@@ -145,6 +146,8 @@ parse_4thArgument_for_nac_scheduler_name() {
 		GITHUB_ORGANIZATION=$(echo $SECRET_STRING  | jq -r '.SecretString' | jq -r '.github_organization')
 		USER_VPC_ID=$(echo $SECRET_STRING  | jq -r '.SecretString' | jq -r '.user_vpc_id')
 		USER_SUBNET_ID=$(echo $SECRET_STRING  | jq -r '.SecretString' | jq -r '.user_subnet_id')
+		USE_PRIVATE_IP=$(echo $SECRET_STRING  | jq -r '.SecretString' | jq -r '.use_private_ip')
+		
 		echo "INFO ::: github_organization=$GITHUB_ORGANIZATION :: nac_scheduler_name=$NAC_SCHEDULER_NAME :: nmc_api_username=$NMC_API_USERNAME :: nmc_api_password=$NMC_API_PASSWORD :: nmc_api_endpoint=$NMC_API_ENDPOINT :: pem_key_path=$PEM_KEY_PATH"
 	fi
 	if [ "$GITHUB_ORGANIZATION" == "" ] || [ "$GITHUB_ORGANIZATION" == "null" ]; then
@@ -250,6 +253,7 @@ parse_textfile_for_user_secret_keys_values() {
 		"github_organization") GITHUB_ORGANIZATION="$value" ;;
 		"user_vpc_id") USER_VPC_ID="$value" ;;
 		"user_subnet_id") USER_SUBNET_ID="$value" ;;
+		"use_private_ip") USE_PRIVATE_IP="$value" ;;
 		esac
 	done <"$file"
 	if [ "$GITHUB_ORGANIZATION" != "" ]; then
@@ -638,6 +642,9 @@ else
 	fi
 	if [[ "$AZ_IS" != "" ]]; then
 		echo "subnet_availability_zone="\"$AZ_IS\" >>$TFVARS_NAC_SCHEDULER
+	fi
+	if [[ "$USE_PRIVATE_IP" != "" ]]; then
+		echo "use_private_ip="\"$USE_PRIVATE_IP\" >>$TFVARS_NAC_SCHEDULER
 	fi
 	echo "$TFVARS_NAC_SCHEDULER created"
 	echo `cat $TFVARS_NAC_SCHEDULER`
