@@ -358,11 +358,16 @@ Schedule_CRON_JOB() {
 	CRON_DIR_NAME="${NMC_VOLUME_NAME}_${ANALYTICS_SERVICE}"
 	TFVARS_FILE_NAME="${CRON_DIR_NAME}.tfvars"
 	rm -rf "$TFVARS_FILE_NAME"
+	arn=$(aws sts get-caller-identity --profile nasuni| jq -r '.Arn' )
+	AWS_CURRENT_USER=$(cut -d'/' -f2 <<<"$arn")
+	NEW_NAC_IP=$(echo $NAC_SCHEDULER_IP_ADDR | tr '.' '-')
 	echo "aws_profile="\"$AWS_PROFILE\" >>$TFVARS_FILE_NAME
 	echo "region="\"$AWS_REGION\" >>$TFVARS_FILE_NAME
 	echo "volume_name="\"$NMC_VOLUME_NAME\" >>$TFVARS_FILE_NAME
 	echo "user_secret="\"$USER_SECRET\" >>$TFVARS_FILE_NAME
 	echo "github_organization="\"$GITHUB_ORGANIZATION\" >>$TFVARS_FILE_NAME
+	echo "nac_scheduler_ip_addr="\"$NEW_NAC_IP\" >>$TFVARS_FILE_NAME 
+	echo "aws_current_user="\"$AWS_CURRENT_USER\" >>$TFVARS_FILE_NAME ### Append Current aws user
 	if [ $ARG_COUNT -eq 5 ]; then
 		echo "INFO ::: $ARG_COUNT th Argument is supplied as ::: $NAC_INPUT_KVP"
 		append_nac_keys_values_to_tfvars $NAC_INPUT_KVP $TFVARS_FILE_NAME
@@ -375,7 +380,17 @@ Schedule_CRON_JOB() {
 	elif [ $RES -eq 0 ]; then
 		echo "INFO :::create_layer.sh Uploaded Successfully to NAC_Scheduer Instance."
 	fi
-	ssh -i "$PEM" ubuntu@"$NAC_SCHEDULER_IP_ADDR" -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null "sh create_layer.sh nasuni-labs-os-lambda-layer $AWS_PROFILE" #SSA
+	ssh -i "$PEM" ubuntu@"$NAC_SCHEDULER_IP_ADDR" -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null "dos2unix create_layer.sh" #SSA
+	RES="$?"
+	if [ $RES -ne 0 ]; then
+		echo "ERROR ::: Failed to do dos2unix create_layer.sh to NAC_Scheduer Instance."
+		exit 1
+	elif [ $RES -eq 0 ]; then
+		echo "INFO :::create_layer.sh executed dos2unix Successfully to NAC_Scheduer Instance."
+	fi
+	#pass pub_ip to fun SSA
+	#IAM_USER to be defined. et user 
+	ssh -i "$PEM" ubuntu@"$NAC_SCHEDULER_IP_ADDR" -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null "sh create_layer.sh nasuni-labs-os-lambda-layer $AWS_PROFILE $NAC_SCHEDULER_IP_ADDR $aws_current_user" #SSA
 	RES="$?"
 	if [ $RES -ne 0 ]; then
 		echo "ERROR ::: Failed to execute create_layer.sh to NAC_Scheduer Instance."
