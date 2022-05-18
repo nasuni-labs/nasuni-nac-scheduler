@@ -359,7 +359,6 @@ Schedule_CRON_JOB() {
 	TFVARS_FILE_NAME="${CRON_DIR_NAME}.tfvars"
 	rm -rf "$TFVARS_FILE_NAME"
 	arn=$(aws sts get-caller-identity --profile nasuni| jq -r '.Arn' )
-	echo "INFO ::: $arn which will be added for lambda layer::: "
 	AWS_CURRENT_USER=$(cut -d'/' -f2 <<<"$arn")
 	echo "INFO ::: $AWS_CURRENT_USER which will be added for lambda layer::: "
 	NEW_NAC_IP=$(echo $NAC_SCHEDULER_IP_ADDR | tr '.' '-')
