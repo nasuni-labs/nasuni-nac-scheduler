@@ -90,7 +90,7 @@ validate_github() {
 
 nmc_endpoint_accessibility() {
 	NAC_SCHEDULER_NAME="$1"
-	PUB_IP_ADDR_NAC_SCHEDULER="$2"
+	NAC_SCHEDULER_IP_ADDR="$2"
     NMC_API_ENDPOINT="$3"
 	NMC_API_USERNAME="$4"
 	NMC_API_PASSWORD="$5" #14-19
@@ -101,20 +101,20 @@ nmc_endpoint_accessibility() {
 	### parse_textfile_for_user_secret_keys_values user_sec.txt
 	# echo "INFO ::: Inside nmc_endpoint_accessibility"
 	echo "INFO ::: NAC_SCHEDULER_NAME ::: ${NAC_SCHEDULER_NAME}"
-	echo "INFO ::: PUB_IP_ADDR_NAC_SCHEDULER ::: ${PUB_IP_ADDR_NAC_SCHEDULER}"
+	echo "INFO ::: NAC_SCHEDULER_IP_ADDR ::: ${NAC_SCHEDULER_IP_ADDR}"
 	# echo "INFO ::: PEM ::: ${PEM}"
 	echo "INFO ::: NMC_API_ENDPOINT ::: ${NMC_API_ENDPOINT}"
 	echo "INFO ::: NMC_API_USERNAME ::: ${NMC_API_USERNAME}"
 	echo "INFO ::: NMC_API_PASSWORD ::: ${NMC_API_PASSWORD}" # 31-37
 
-	echo "INFO ::: PUB_IP_ADDR_NAC_SCHEDULER : "$PUB_IP_ADDR_NAC_SCHEDULER
+	echo "INFO ::: NAC_SCHEDULER_IP_ADDR : "$NAC_SCHEDULER_IP_ADDR
 	py_file_name=$(ls check_nmc_visiblity.py)
 	echo "INFO ::: Executing Python code file : "$py_file_name
-	cat $py_file_name | ssh -i "$PEM" ubuntu@$PUB_IP_ADDR_NAC_SCHEDULER -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null python3 - $NMC_API_USERNAME $NMC_API_PASSWORD $NMC_API_ENDPOINT
+	cat $py_file_name | ssh -i "$PEM" ubuntu@$NAC_SCHEDULER_IP_ADDR -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null python3 - $NMC_API_USERNAME $NMC_API_PASSWORD $NMC_API_ENDPOINT
 	if [ $? -eq 0 ]; then
-		echo "INFO ::: NAC Scheduler with IP : ${PUB_IP_ADDR_NAC_SCHEDULER}, have access to NMC API ${NMC_API_ENDPOINT} "
+		echo "INFO ::: NAC Scheduler with IP : ${NAC_SCHEDULER_IP_ADDR}, have access to NMC API ${NMC_API_ENDPOINT} "
 	else
-		echo "ERROR ::: NAC Scheduler with IP : ${PUB_IP_ADDR_NAC_SCHEDULER}, Does NOT have access to NMC API ${NMC_API_ENDPOINT}. Please configure access to NMC "
+		echo "ERROR ::: NAC Scheduler with IP : ${NAC_SCHEDULER_IP_ADDR}, Does NOT have access to NMC API ${NMC_API_ENDPOINT}. Please configure access to NMC "
 		exit 1
 	fi
 	echo "INFO ::: Completed NMC endpoint accessibility Check. !!!"
@@ -302,17 +302,10 @@ add_ip_to_sec_grp() {
 	echo "INFO ::: Public IP of the local machine is ${LOCAL_IP}"
 	NEW_CIDR="${LOCAL_IP}"/32
 	echo "INFO ::: NEW_CIDR :- ${NEW_CIDR}"
-	### Get NAC Scheduler IP
-	if [ "$NAC_SCHEDULER_NAME" != "" ]; then
-		SECURITY_GROUP_ID=$(aws ec2 describe-instances --query "Reservations[].Instances[].{Name:Tags[?Key=='Name']|[0].Value,Status:State.Name,PublicIP:PublicIpAddress,SecurityGroups:SecurityGroups[*]}" --filters "Name=tag:Name,Values='$NAC_SCHEDULER_NAME'" "Name=instance-state-name,Values=running" --region $AWS_REGION --profile "${AWS_PROFILE}" | grep -e "GroupId" | cut -d":" -f 2 | tr -d '"')
-		echo $SECURITY_GROUP_ID
-		echo "INFO ::: Security group of $NAC_SCHEDULER_NAME is $SECURITY_GROUP_ID"
-	else
-		echo "INFO ::: NAC Scheduler Instance $NAC_SCHEDULER_NAME is present .So fetching its security group . . . . . "
-		SECURITY_GROUP_ID=$(aws ec2 describe-instances --query "Reservations[].Instances[].{Name:Tags[?Key=='Name']|[0].Value,Status:State.Name,PublicIP:PublicIpAddress,SecurityGroups:SecurityGroups[*]}" --filters "Name=tag:Name,Values='NACScheduler'" "Name=instance-state-name,Values=running" --region $AWS_REGION --profile "${AWS_PROFILE}" | grep -e "GroupId" | cut -d":" -f 2 | tr -d '"')
-		echo $SECURITY_GROUP_ID
-		echo "INFO ::: Security group of NAC Scheduler Instance $NAC_SCHEDULER_NAME is $SECURITY_GROUP_ID"
-	fi
+	### Get Security group of NAC Scheduler
+	SECURITY_GROUP_ID=$(aws ec2 describe-instances --query "Reservations[].Instances[].{Name:Tags[?Key=='Name']|[0].Value,Status:State.Name,SecurityGroups:SecurityGroups[*]}" --filters "Name=tag:Name,Values='$NAC_SCHEDULER_NAME'" "Name=instance-state-name,Values=running" --region $AWS_REGION --profile $AWS_PROFILE | grep -e "GroupId" | cut -d":" -f 2 | tr -d '"')
+	echo $SECURITY_GROUP_ID
+	echo "INFO ::: Security group of $NAC_SCHEDULER_NAME is $SECURITY_GROUP_ID"
 	status=$(aws ec2 authorize-security-group-ingress --group-id ${SECURITY_GROUP_ID} --profile "${AWS_PROFILE}" --protocol tcp --port 22 --cidr ${NEW_CIDR} 2>/dev/null)
 	if [ $? -eq 0 ]; then
 		echo "INFO ::: Local Computer IP $NEW_CIDR updated to inbound rule of Security Group $SECURITY_GROUP_ID"
@@ -559,18 +552,26 @@ parse_4thArgument_for_nac_scheduler_name "$FOURTH_ARG"
 echo "INFO ::: nac_scheduler_name = $NAC_SCHEDULER_NAME "
 if [ "$NAC_SCHEDULER_NAME" != "" ]; then
 	### User has provided the NACScheduler Name as Key-Value from 4th Argument
-	PUB_IP_ADDR_NAC_SCHEDULER=$(aws ec2 describe-instances --query "Reservations[*].Instances[*].{Name:Tags[?Key=='Name']|[0].Value,Status:State.Name,PublicIP:PublicIpAddress}" --filters "Name=tag:Name,Values='$NAC_SCHEDULER_NAME'" "Name=instance-state-name,Values=running" --region "${AWS_REGION}" --profile ${AWS_PROFILE}| grep -e "PublicIP" | cut -d":" -f 2 | tr -d '"' | tr -d ' ')
+	if [[ "$USE_PRIVATE_IP" != "Y" ]]; then
+		### Getting Public_IP of NAC Scheduler
+		NAC_SCHEDULER_IP_ADDR=$(aws ec2 describe-instances --query "Reservations[*].Instances[*].{Name:Tags[?Key=='Name']|[0].Value,Status:State.Name,PublicIP:PublicIpAddress}" --filters "Name=tag:Name,Values='$NAC_SCHEDULER_NAME'" "Name=instance-state-name,Values=running" --region "${AWS_REGION}" --profile ${AWS_PROFILE}| grep -e "PublicIP" | cut -d":" -f 2 | tr -d '"' | tr -d ' ')
+		echo "INFO ::: Public_IP of NAC Scheduler is: $NAC_SCHEDULER_IP_ADDR"
+	else
+		### Getting Private_IP of NAC Scheduler
+		echo "INFO ::: Private_IP of NAC Scheduler is: $NAC_SCHEDULER_IP_ADDR"
+		NAC_SCHEDULER_IP_ADDR=`aws ec2 describe-instances --query "Reservations[*].Instances[*].{Name:Tags[?Key=='Name']|[0].Value,Status:State.Name,PrivateIp:PrivateIpAddress}" --filters "Name=tag:Name,Values='$NAC_SCHEDULER_NAME'" "Name=instance-state-name,Values=running" --region "${AWS_REGION}" --profile ${AWS_PROFILE} | grep -e "PrivateIp" | cut -d":" -f 2 | tr -d '"' | tr -d ' '`
+	fi
 else
-	PUB_IP_ADDR_NAC_SCHEDULER=$(aws ec2 describe-instances --query "Reservations[*].Instances[*].{Name:Tags[?Key=='Name']|[0].Value,Status:State.Name,PublicIP:PublicIpAddress}" --filters "Name=tag:Name,Values='NACScheduler'" "Name=instance-state-name,Values=running" --region "${AWS_REGION}" --profile ${AWS_PROFILE}| grep -e "PublicIP" | cut -d":" -f 2 | tr -d '"' | tr -d ' ')
+	NAC_SCHEDULER_IP_ADDR=$(aws ec2 describe-instances --query "Reservations[*].Instances[*].{Name:Tags[?Key=='Name']|[0].Value,Status:State.Name,PublicIP:PublicIpAddress}" --filters "Name=tag:Name,Values='NACScheduler'" "Name=instance-state-name,Values=running" --region "${AWS_REGION}" --profile ${AWS_PROFILE}| grep -e "PublicIP" | cut -d":" -f 2 | tr -d '"' | tr -d ' ')
 fi
-echo "INFO ::: PUB_IP_ADDR_NAC_SCHEDULER ::: ${PUB_IP_ADDR_NAC_SCHEDULER}"
-if [ "$PUB_IP_ADDR_NAC_SCHEDULER" != "" ]; then
-	echo "INFO ::: NAC Scheduler Instance is Available. IP Address: $PUB_IP_ADDR_NAC_SCHEDULER"
+echo "INFO ::: NAC_SCHEDULER_IP_ADDR ::: $NAC_SCHEDULER_IP_ADDR"
+if [ "$NAC_SCHEDULER_IP_ADDR" != "" ]; then
+	echo "INFO ::: NAC Scheduler Instance is Available. IP Address: $NAC_SCHEDULER_IP_ADDR"
 	### Call this function to add Local public IP to Security group of NAC_SCHEDULER IP
-	add_ip_to_sec_grp $PUB_IP_ADDR_NAC_SCHEDULER $NAC_SCHEDULER_NAME
-	### nmc endpoint accessibility $NAC_SCHEDULER_NAME $PUB_IP_ADDR_NAC_SCHEDULER
-	nmc_endpoint_accessibility  $NAC_SCHEDULER_NAME $PUB_IP_ADDR_NAC_SCHEDULER $NMC_API_ENDPOINT $NMC_API_USERNAME $NMC_API_PASSWORD #458
-	Schedule_CRON_JOB $PUB_IP_ADDR_NAC_SCHEDULER
+	add_ip_to_sec_grp $NAC_SCHEDULER_IP_ADDR $NAC_SCHEDULER_NAME
+	### nmc endpoint accessibility $NAC_SCHEDULER_NAME $NAC_SCHEDULER_IP_ADDR
+	nmc_endpoint_accessibility  $NAC_SCHEDULER_NAME $NAC_SCHEDULER_IP_ADDR $NMC_API_ENDPOINT $NMC_API_USERNAME $NMC_API_PASSWORD #458
+	Schedule_CRON_JOB $NAC_SCHEDULER_IP_ADDR
 
 ###################### NAC Scheduler EC2 Instance is NOT Available ##############################
 else
@@ -683,7 +684,7 @@ else
 	pwd
 	## Call this function to add Local public IP to Security group of NAC_SCHEDULER IP
 	add_ip_to_sec_grp ${NAC_SCHEDULER_IP_ADDR}
-	## nmc endpoint accessibility $NAC_SCHEDULER_NAME $PUB_IP_ADDR_NAC_SCHEDULER
+	## nmc endpoint accessibility $NAC_SCHEDULER_NAME $NAC_SCHEDULER_IP_ADDR
 	nmc_endpoint_accessibility  $NAC_SCHEDULER_NAME ${NAC_SCHEDULER_IP_ADDR} $NMC_API_ENDPOINT $NMC_API_USERNAME $NMC_API_PASSWORD #458
 	Schedule_CRON_JOB $NAC_SCHEDULER_IP_ADDR
 	## Setup_Search_Lambda
