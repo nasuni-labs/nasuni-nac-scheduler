@@ -11,3 +11,5 @@ nac-es
 # .gitignore
 prov_nacmanager
 *.pem
+*.log
+
