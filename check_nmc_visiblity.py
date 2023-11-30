@@ -15,8 +15,8 @@ logging.getLogger().setLevel(logging.INFO)
 logging.info(f'date={date}')
 dash,username,password,endpoint=sys.argv
 endpoint = endpoint.replace('\r', '')  # removing /r
-print('Argument List:', str(sys.argv))
-print('endpoint',endpoint)
+print('INFO ::: Argument List:', str(sys.argv))
+print('INFO ::: endpoint',endpoint)
 try:
     logging.info(sys.argv)
     url = 'https://' + endpoint + '/api/v1.1/auth/login/'
@@ -29,9 +29,9 @@ try:
     result = json.loads(response.read().decode('utf-8'))
     logging.info(result)
     if(result):
-        print('Token Generated')
+        print('INFO ::: Token Generated')
     else:
-        print('Token Not generated')
+        print('INFO ::: Token Not generated')
     cmd = 'curl -k -X GET -H \"Accept: application/json\" -H \"Authorization: Token ' + result['token'] + '\" \"https://' + endpoint + '/api/v1.1/volumes/\"'
     logging.info(cmd)
     args = shlex.split(cmd)
@@ -39,9 +39,9 @@ try:
     stdout, stderr = process.communicate()
     json_data = json.loads(stdout.decode('utf-8'))
     if(json_data):
-        print('Data Fetched')
+        print('INFO ::: Data Fetched')
     else:
-        print('Data Not Fetched')
+        print('INFO ::: Data Not Fetched')
 except Exception as e:
-    print('Runtime Errors', e)
+    print('INFO ::: Runtime Errors', e)
     exit(1)
