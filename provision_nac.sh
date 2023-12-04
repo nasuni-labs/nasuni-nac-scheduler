@@ -418,7 +418,17 @@ fi
 sleep 300
 if [ "${SERVICE_NAME^^}" = "EXP" ] ; then
 	echo "INFO ::: EXPORT Completed"
-	exit 0
+	echo "INFO ::: STARTED ::: CLEANUP NAC STACK and dependent resources . . . . . . . . . . . . . . . . . . . . ."
+	
+	# ##### RUN terraform destroy to CLEANUP NAC STACK and dependent resources
+	COMMAND="terraform destroy -var-file=${TFVARS_FILE} -auto-approve"
+	$COMMAND
+	echo "INFO ::: COMPLETED ::: CLEANUP NAC STACK and dependent resources ! ! ! ! "
+
+	END=$(date +%s)
+	secs=$((END - START))
+	DIFF=$(printf '%02dh:%02dm:%02ds\n' $((secs/3600)) $((secs%3600/60)) $((secs%60)))
+	echo "INFO ::: Total execution Time ::: $DIFF"
 else
 	echo "INFO ::: NAC_Activity : Indexing Completed"
 	MOST_RECENT_RUN=$(date "+%Y:%m:%d-%H:%M:%S")
